@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::Read;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use clap::Parser;
@@ -49,12 +51,16 @@ fn main() {
 }
 
 fn deserialize_bank(bank: Bank, input_path: &str) -> Vec<YnabImportRow> {
+    let mut file = File::open(input_path).expect("Failed to open file");
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).expect("Failed to read file");
+    let file_contents = String::from_utf8_lossy(buf.as_slice()).to_string();
+
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)
         .flexible(true)
-        .from_path(input_path)
-        .expect("Failed to open file");
+        .from_reader(file_contents.as_bytes());
     match bank {
         Bank::SPankki => {
             // read csv file with semicolon as separator
@@ -89,13 +95,21 @@ struct SPankkiAccountStatementRow {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct DanskeBankAccountStatementRow {
+    #[serde(rename = "Pvm")]
     date: String,
+    #[serde(rename = "Luokka")]
     class: String,
+    #[serde(rename = "Alaluokka")]
     subclass: String,
+    #[serde(rename = "Saaja/Maksaja")]
     payee: String,
+    #[serde(rename = "M��r�")]
     amount: String,
+    #[serde(rename = "Saldo")]
     balance: String,
+    #[serde(rename = "Tila")]
     status: String,
+    #[serde(rename = "Tarkastus")]
     check: String,
 }
 
