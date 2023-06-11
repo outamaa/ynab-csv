@@ -1,35 +1,26 @@
+mod bank;
+mod ynab;
+
 use std::fs::File;
 use std::io::Read;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 use clap::Parser;
+use crate::bank::{Bank, DanskeBankAccountStatementRow, SPankkiAccountStatementRow};
+use crate::ynab::YnabImportRow;
 
 #[derive(Parser)]
 struct Args {
+    /// Path to input CSV
     #[clap(short, long)]
     input: String,
+    /// Path to output CSV
     #[clap(short, long)]
     output: String,
+    /// Bank: "s-pankki" or "danske"
     #[clap(short, long)]
     bank: String,
 }
 
-enum Bank {
-    SPankki,
-    DanskeBank,
-}
-
-impl FromStr for Bank {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "s-pankki" => Ok(Bank::SPankki),
-            "danske-bank" => Ok(Bank::DanskeBank),
-            _ => Err(format!("Unknown bank: {}", s)),
-        }
-    }
-}
 
 fn main() {
     let args = Args::parse();
@@ -63,7 +54,6 @@ fn deserialize_bank(bank: Bank, input_path: &str) -> Vec<YnabImportRow> {
         .from_reader(file_contents.as_bytes());
     match bank {
         Bank::SPankki => {
-            // read csv file with semicolon as separator
             reader
                 .deserialize::<SPankkiAccountStatementRow>()
                 .flatten()
@@ -77,78 +67,5 @@ fn deserialize_bank(bank: Bank, input_path: &str) -> Vec<YnabImportRow> {
                 .filter_map(|row| row.try_into().ok())
                 .collect()
         }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct SPankkiAccountStatementRow {
-    #[serde(rename = "Maksupäivä")]
-    date: String,
-    #[serde(rename = "Saajan nimi")]
-    payee: String,
-    #[serde(rename = "Viesti")]
-    memo: String,
-    #[serde(rename = "Summa")]
-    amount: String,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-struct DanskeBankAccountStatementRow {
-    #[serde(rename = "Pvm")]
-    date: String,
-    #[serde(rename = "Luokka")]
-    class: String,
-    #[serde(rename = "Alaluokka")]
-    subclass: String,
-    #[serde(rename = "Saaja/Maksaja")]
-    payee: String,
-    #[serde(rename = "M��r�")]
-    amount: String,
-    #[serde(rename = "Saldo")]
-    balance: String,
-    #[serde(rename = "Tila")]
-    status: String,
-    #[serde(rename = "Tarkastus")]
-    check: String,
-}
-
-#[derive(Debug, Serialize)]
-struct YnabImportRow {
-    #[serde(rename = "Date")]
-    date: String,
-    #[serde(rename = "Payee")]
-    payee: String,
-    #[serde(rename = "Memo")]
-    memo: String,
-    #[serde(rename = "Amount")]
-    amount: String,
-}
-
-impl From<SPankkiAccountStatementRow> for YnabImportRow {
-    fn from(row: SPankkiAccountStatementRow) -> Self {
-        YnabImportRow {
-            date: row.date,
-            payee: row.payee,
-            memo: row.memo.replace("'", ""),
-            amount: row.amount.replace(",", ".").replace("+", "")
-        }
-    }
-}
-
-impl TryFrom<DanskeBankAccountStatementRow> for YnabImportRow {
-    type Error = String;
-
-    fn try_from(value: DanskeBankAccountStatementRow) -> Result<Self, Self::Error> {
-        match value.status.as_str() {
-            "Toteutunut" => Ok(YnabImportRow {
-                date: value.date,
-                payee: value.payee.trim().to_string(),
-                memo: format!("{}: {}", value.class.trim(), value.subclass.trim()),
-                amount: value.amount.replace(",", ".").replace("+", "")
-            }),
-            _ => Err(format!("Transaction not executed: {}", value.payee))
-        }
-
     }
 }
